@@ -1,0 +1,7 @@
+[project]
+name = "pdga-data"
+version = "0.1.0"
+description = "PDGA data collector and API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
