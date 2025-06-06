@@ -43,7 +43,6 @@ class DiscBase(BaseModel):
 
 
 class CompanyBase(BaseModel):
-    """Company Name,Status,Approved Equipment,Contact,Phone,Address,City,State,Country,ZIP,Website"""
     company_name: str
     equipment: str = None
     address: Optional[str] = None

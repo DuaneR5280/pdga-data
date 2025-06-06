@@ -60,7 +60,7 @@ class Downloader:
     
     @staticmethod
     def validate_website(url: str) -> str:
-        """Validates website URL"""
+        """Validates URL is reachable and returns the final URL."""
         if not url or not isinstance(url, str):
             return None
         
@@ -76,10 +76,11 @@ class Downloader:
             else:
                 logging.warning(f"Invalid URL: {url} - Status Code: {response.status_code}")
                 return None
+
         except Exception as e:
             logging.error(f"Error validating website {url}: {e}")
             return None
-        
+
 
 class DiscsDF:
     """Handles transformation and schema validation for disc data."""
