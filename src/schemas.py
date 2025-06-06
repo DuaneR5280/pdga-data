@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, TypedDict, Dict, Any
+from typing import List, Union, Optional, Dict, Any
 from datetime import datetime, date
 from pydantic import (
     BaseModel,
@@ -9,7 +9,7 @@ from pydantic import (
     model_validator,
     RootModel,
 )
-
+from rich import print
 
 class DiscBase(BaseModel):
     manufacturer: str
@@ -43,24 +43,34 @@ class DiscBase(BaseModel):
 
 
 class CompanyBase(BaseModel):
-    name: str
+    """Company Name,Status,Approved Equipment,Contact,Phone,Address,City,State,Country,ZIP,Website"""
+    company_name: str
     equipment: str = None
-    address: str = None
-    city: str = None
-    state: str = None
-    postal_code: str = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
     country: str = None
-    phone: str = None
-    website: HttpUrl = None
-    twitter: HttpUrl = None
-    facebook: HttpUrl = None
-    instagram: HttpUrl = None
-    youtube: HttpUrl = None
+    phone: Optional[str] = None
+    website: Optional[HttpUrl] = None
+    twitter: Optional[HttpUrl] = None
+    facebook: Optional[HttpUrl] = None
+    instagram: Optional[HttpUrl] = None
+    youtube: Optional[HttpUrl] = None
     contact_name: str = None
     contact_email: str = None
     contact_phone: str = None
     is_active: bool = True
 
+    @field_validator("is_active", mode="before")
+    @classmethod
+    def parse_bool(cls, value):
+        if isinstance(value, str):
+            if value.lower() == "active":
+                return True
+            elif value.lower() == "inactive":
+                return False
+        return value
 
 # Tournaments
 class HoleDetail(BaseModel):
@@ -320,4 +330,4 @@ class PlayerBase(BaseModel):
         Returns:
             dict: A dictionary representation of the PlayerBase object.
         """
-        return self.dict(exclude={"stats_years_urls", "event_results"})
+        return self.model_dump(exclude={"stats_years_urls", "event_results"})

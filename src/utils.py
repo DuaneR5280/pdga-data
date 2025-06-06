@@ -6,7 +6,9 @@ from typing import List
 import pandas as pd
 from pandas import DataFrame
 import httpx
-from schemas import DiscBase
+from urllib.parse import urlparse
+from schemas import DiscBase, CompanyBase
+from rich import print
 
 # Settings
 BASE_PATH = Path(__file__).parent
@@ -55,7 +57,29 @@ class Downloader:
             writer = csv.writer(file)
             writer.writerows(csv_data)
         logging.info(f"CSV file saved: {csv_file}")
+    
+    @staticmethod
+    def validate_website(url: str) -> str:
+        """Validates website URL"""
+        if not url or not isinstance(url, str):
+            return None
+        
+        try:
+            response = httpx.get(url, follow_redirects=True, timeout=5)
 
+            if len(response.history) > 1:
+                logging.warning(f"Too many redirects for URL: {url}")
+                return None            
+            
+            if response.status_code == 200:
+                return str(response.url) if response.url else url
+            else:
+                logging.warning(f"Invalid URL: {url} - Status Code: {response.status_code}")
+                return None
+        except Exception as e:
+            logging.error(f"Error validating website {url}: {e}")
+            return None
+        
 
 class DiscsDF:
     """Handles transformation and schema validation for disc data."""
@@ -101,16 +125,92 @@ class DiscsDF:
     def validate_schema(self) -> None:
         """Validates data against the schema."""
         records = self.df.to_dict("records")
-        data, errors = [], []
+        data, self.validation_errors = [], []
         for record in records:
             try:
                 record["approved"] = datetime.combine(record["approved"], datetime.min.time())
                 data.append(DiscBase(**record))
             except Exception as e:
-                errors.append((record, e))
+                self.validation_errors.append((record, e))
+                logging.error(f"Error validating disc record: {record}, Error: {e}")
         self.schema_data = data
         logging.info(
-            f"Schema validation complete. Records: {len(data)}, Errors: {len(errors)}"
+            f"Schema validation for DiscsDF complete. Records: {len(data)}, Errors: {len(self.validation_errors)}"
+        )
+
+
+class ManufacturersDF:
+    """Handles transformation and schema validation for manufacturer data."""
+
+    def __init__(self, df: DataFrame) -> None:
+        self.df = df
+        self.schema_data = None
+        self.transform()
+
+    def transform(self) -> None:
+        self.rename_columns()
+        self.df = self.df.where(pd.notnull(self.df), None)
+        self.df["website"] = self.df["website"].apply(self.clean_url)
+        self.validate_schema()
+
+    def rename_columns(self) -> None:
+        """Renames and removes unnecessary columns."""
+        fieldnames = [
+            "company_name", "is_active", "equipment", "contact_name", "phone", "address", "city", "state",
+            "country", "postal_code", "website"
+        ]
+
+        self.df.columns = fieldnames
+
+    def clean_url(self, url: str) -> str:
+        if not url or not isinstance(url, str):
+            return None
+  
+        # Normalize URL
+        url = url.strip().replace(" ", "").lower()
+        
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        
+        if url.startswith("http://"):
+            url = url.replace("http://", "https://")
+
+        og_host = urlparse(url).netloc
+
+        if not og_host:
+            logging.warning(f"Invalid URL: {url} - No host found")
+            return None
+        
+        social_media_domains = [
+            "facebook.com", "twitter.com", "instagram.com", "youtube.com", "linkedin.com"
+        ]
+
+        if any(domain in og_host for domain in social_media_domains):
+            # Future - handle social media URLs to correct schema location
+            logging.warning(f"Social media URL detected: {url}")
+            return url
+        
+        # url = Downloader.validate_website(url)
+
+        if not url:
+            logging.warning(f"Invalid URL: {url} - Validation failed")
+            return None
+        
+        return url
+    
+    def validate_schema(self) -> None:
+        """Validates data against the schema."""
+        records = self.df.to_dict("records")
+        data, self.validation_errors = [], []
+        for record in records:
+            try:
+                data.append(CompanyBase(**record))
+            except Exception as e:
+                self.validation_errors.append((record, e))
+                logging.error(f"Error validating company record: {record}, Error: {e}")
+        self.schema_data = data
+        logging.info(
+            f"Schema validation for ManufacturersDF complete. Records: {len(data)}, Errors: {len(self.validation_errors)}"
         )
 
 
@@ -149,7 +249,8 @@ def main() -> None:
     )
     discs_handler.download_and_save_csv()
     raw_df = discs_handler.load_dataframe()
-    DiscsDF(raw_df)
+    discs = DiscsDF(raw_df)
+
 
     # Manufacturers Data
     manufacturers_handler = PDGADataHandler(
@@ -159,7 +260,10 @@ def main() -> None:
         filename=f"pdga-manufacturers_{datetime.now().date()}.csv",
     )
     manufacturers_handler.download_and_save_csv()
+    raw_companies_df = manufacturers_handler.load_dataframe()
+    companies = ManufacturersDF(raw_companies_df)
 
+    return discs, companies
 
 if __name__ == "__main__":
-    main()
+    discs, companies = main()
